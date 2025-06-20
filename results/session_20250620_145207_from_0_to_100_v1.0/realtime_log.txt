@@ -1,0 +1,101 @@
+[14:52:54] Processed 1 companies. Current: Starkey Hearing
+[14:53:37] Processed 2 companies. Current: We Are Cultura
+[14:54:00] Processed 3 companies. Current: Csscompany
+[14:54:42] Processed 4 companies. Current: f2design.com
+[14:55:33] Processed 5 companies. Current: Applied Intuition
+[14:56:06] Processed 6 companies. Current: Open Dental Software
+[14:56:42] Processed 7 companies. Current: Sonder
+[14:56:46] Processed 8 companies. Current: onobbq.com
+[14:56:47] Processed 9 companies. Current: TuSimple
+[14:57:18] Processed 10 companies. Current: MuteSix
+[14:57:49] Processed 11 companies. Current: Life Is Good
+[14:58:09] Processed 12 companies. Current: curology.com
+[14:58:10] Processed 13 companies. Current: am.jll.com
+[14:58:40] Processed 14 companies. Current: Tech Serv Consulting and Training
+[14:59:06] Processed 15 companies. Current: k2space.com
+[14:59:24] Processed 16 companies. Current: synthego.com
+[14:59:49] Processed 17 companies. Current: M º L E K U L E
+[14:59:50] Processed 18 companies. Current: spirit.com
+[15:00:25] Processed 19 companies. Current: WillowTree
+[15:01:10] Processed 20 companies. Current: keepersecurity.com
+[15:01:50] Processed 21 companies. Current: Moveworks
+[15:02:21] Processed 22 companies. Current: Zonos
+[15:02:58] Processed 23 companies. Current: Information Sciences Institute - University of Southern California
+[15:03:09] Processed 24 companies. Current: Outward
+[15:03:10] Processed 25 companies. Current: appliedmaterialventures.com
+[15:03:20] Processed 26 companies. Current: Ruggable
+[15:03:45] Processed 27 companies. Current: dollskill.com
+[15:03:46] Processed 28 companies. Current: Enjoy
+[15:04:05] Processed 29 companies. Current: lp.co
+[15:04:35] Processed 30 companies. Current: fireflyon.com
+[15:04:37] Processed 31 companies. Current: arbee.net
+[15:04:40] Processed 32 companies. Current: geniusfund.com
+[15:05:09] Processed 33 companies. Current: Gecko Robotics, Inc.
+[15:05:45] Processed 34 companies. Current: NorthCare
+[15:06:21] Processed 35 companies. Current: Doosan Group
+[15:06:26] Processed 36 companies. Current: Coldwell Banker
+[15:06:56] Processed 37 companies. Current: Campaign Monitor
+[15:07:00] Processed 38 companies. Current: trunkclub.com
+[15:07:31] Processed 39 companies. Current: Thearchitectfirm
+[15:08:07] Processed 40 companies. Current: Capella Space
+[15:08:44] Processed 41 companies. Current: CloudKitchens
+[15:09:19] Processed 42 companies. Current: Clearwater Analytics
+[15:09:56] Processed 43 companies. Current: Grover Gaming
+[15:09:58] Processed 44 companies. Current: chalopin.com
+[15:10:52] Processed 45 companies. Current: Abbott
+[15:11:16] Processed 46 companies. Current: Granular
+[15:11:51] Processed 47 companies. Current: COMC - Check Out My Collectibles
+[15:12:14] Processed 48 companies. Current: SPIE
+[15:12:15] Processed 49 companies. Current: Impossible Foods
+[15:12:51] Processed 50 companies. Current: Sipearl
+[15:13:24] Processed 51 companies. Current: samba.tv
+[15:13:57] Processed 52 companies. Current: Decisions
+[15:14:35] Processed 53 companies. Current: twosixtechnologies
+[15:14:37] Processed 54 companies. Current: GOAT
+[15:14:41] Processed 55 companies. Current: parker.com
+[15:14:50] Processed 56 companies. Current: Dermacare
+[15:15:24] Processed 57 companies. Current: cabrioproperties.com
+[15:15:40] Processed 58 companies. Current: directs.com
+[15:16:17] Processed 59 companies. Current: FloQast
+[15:16:54] Processed 60 companies. Current: Ohio University
+[15:17:12] Processed 61 companies. Current: a.ki
+[15:17:57] Processed 62 companies. Current: Mapbox
+[15:18:38] Processed 63 companies. Current: Areté
+[15:18:54] Processed 64 companies. Current: Festo US
+[15:19:33] Processed 65 companies. Current: OrderMyGear
+[15:19:35] Processed 66 companies. Current: Linode
+[15:20:08] Processed 67 companies. Current: Next Level Solutions
+[15:20:42] Processed 68 companies. Current: techserv.com
+[15:21:30] Processed 69 companies. Current: Ultratec, Inc.
+[15:22:10] Processed 70 companies. Current: MeridianLink
+[15:22:49] Processed 71 companies. Current: Office Revolution
+[15:23:26] Processed 72 companies. Current: Algolia
+[15:23:56] Processed 73 companies. Current: GTA
+[15:23:59] Processed 74 companies. Current: TicketManager
+[15:24:46] Processed 75 companies. Current: Lab Logistics
+[15:25:13] Processed 76 companies. Current: Altius
+[15:25:44] Processed 77 companies. Current: InMotion Hosting
+[15:26:19] Processed 78 companies. Current: Public Strategies
+[15:26:58] Processed 79 companies. Current: Samsara
+[15:27:28] Processed 80 companies. Current: tentree
+[15:28:08] Processed 81 companies. Current: Paragon Space Development Corporation
+[15:28:33] Processed 82 companies. Current: Marvin Windows
+[15:29:03] Processed 83 companies. Current: AppZen
+[15:29:38] Processed 84 companies. Current: caastle.com
+[15:29:40] Processed 85 companies. Current: Quizlet
+[15:32:19] Processed 86 companies. Current: MINDBODY
+[15:32:21] Processed 87 companies. Current: fuerstgroup.com
+[15:32:53] Processed 88 companies. Current: Havas Group
+[15:33:29] Processed 89 companies. Current: TRITONSYS.COM
+[15:33:55] Processed 90 companies. Current: Othram
+[15:34:01] Processed 91 companies. Current: United States Coast Guard
+[15:34:44] Processed 92 companies. Current: Goddard
+[15:34:48] Processed 93 companies. Current: IPCoop
+[15:35:23] Processed 94 companies. Current: Swinerton
+[15:35:54] Processed 95 companies. Current: Checkfront
+[15:36:31] Processed 96 companies. Current: PropLogix
+[15:36:43] Processed 97 companies. Current: 1piecework.com
+[15:37:13] Processed 98 companies. Current: MightyHive
+[15:37:47] Processed 99 companies. Current: UC San Diego
+[15:38:21] Processed 100 companies. Current: Ontraport
+[15:38:23] Processed 100 companies. Current: COMPLETED
