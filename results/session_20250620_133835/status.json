@@ -1,0 +1,10 @@
+{
+  "session_timestamp": "20250620_133835",
+  "total_processed": 4,
+  "last_updated": "2025-06-20T13:40:22.284496",
+  "current_company": "COMPLETED",
+  "files": {
+    "csv": "results/session_20250620_133835\\results.csv",
+    "json": "results/session_20250620_133835\\detailed_results.json"
+  }
+}
