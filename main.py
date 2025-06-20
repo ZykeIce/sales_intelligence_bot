@@ -10,10 +10,12 @@ import signal
 import sys
 from datetime import datetime
 import re
+import argparse
 
 # Global variables for graceful shutdown
 running = True
 session_folder = None
+VERSION = '1.0'
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
@@ -21,10 +23,11 @@ def signal_handler(signum, frame):
     print(f"\n\n🛑 Received stop signal. Saving progress and shutting down gracefully...")
     running = False
 
-def create_session_folder():
-    """Create a session folder for this run"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_folder = f"results/session_{timestamp}"
+def create_session_folder(start=0, end=None, version=VERSION):
+    """Create a timestamped session folder for results, including company range and version."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    folder_name = f"session_{timestamp}_from_{start}_to_{end if end is not None else 'end'}_v{version}"
+    session_folder = os.path.join('results', folder_name)
     os.makedirs(session_folder, exist_ok=True)
     return session_folder, timestamp
 
@@ -116,8 +119,15 @@ def main():
         print("ERROR: Please update PRODUCT_DESCRIPTION in config.py with your actual product information!")
         return
     
-    # Create session folder
-    session_folder, timestamp = create_session_folder()
+    # Parse command-line arguments for custom range
+    parser = argparse.ArgumentParser(description="Sales Intelligence Bot")
+    parser.add_argument('--start', type=int, default=0, help='Start index (inclusive)')
+    parser.add_argument('--end', type=int, default=None, help='End index (exclusive)')
+    parser.add_argument('--version', type=str, default=VERSION, help='Session version string')
+    args = parser.parse_args()
+    
+    # Create session folder with range and version
+    session_folder, timestamp = create_session_folder(args.start, args.end, args.version)
     print(f"Session folder: {session_folder}")
     print(f"📁 Results will be saved in real-time to: {session_folder}")
     print(f"⏹️  Press Ctrl+C to stop and save progress")
@@ -128,6 +138,11 @@ def main():
     companies_df = data_processor.load_companies("data/companies.csv")
     print(f"Loaded {len(companies_df)} companies")
 
+    # Apply custom range if specified
+    start_idx = args.start
+    end_idx = args.end if args.end is not None else len(companies_df)
+    companies_df = companies_df.iloc[start_idx:end_idx]
+    
     # Check for existing results to resume
     existing_results = load_existing_results(session_folder)
     
@@ -139,7 +154,7 @@ def main():
         print(f"🔄 Resuming: {len(companies_to_process)} companies remaining to process")
     else:
         # Start fresh
-        companies_to_process = companies_df.head(10)  # Test with first 5
+        companies_to_process = companies_df  # Now using the custom range
         results = []
         print(f"🚀 Starting fresh: processing first {len(companies_to_process)} companies")
 

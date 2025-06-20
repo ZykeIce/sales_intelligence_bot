@@ -33,6 +33,14 @@ def get_purchase_probability(company_text: str):
     - A logical, non-random calculation or estimation process, show your calculations. be precise, you can evaluate the percentage yourself.
     - Why you did NOT choose a higher or lower number
     - Think very very very carefully.
+    
+    # --- ENHANCED OUTPUT REQUIREMENTS ---
+    Additionally, provide the following sections in your output:
+    - OPEN ROLES: List all open roles you found (if any), or say 'None found'.
+    - RECENT NEWS OR GROWTH SIGNALS: Summarize any recent news, funding, or signals of company growth/expansion.
+    - PRODUCT FIT: Briefly state if there is a strong, weak, or unclear fit between the company and our product, and why.
+    - RED FLAGS: List any red flags (e.g., layoffs, hiring freeze, negative news, etc.) or say 'None found'.
+    # --- END ENHANCED OUTPUT REQUIREMENTS ---
     If you do not provide a PERCENTAGE in the exact format above, your answer will be considered incomplete.
     """
 
