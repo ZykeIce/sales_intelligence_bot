@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 import re
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Global variables for graceful shutdown
 running = True
@@ -105,6 +106,55 @@ def parse_ai_analysis(ai_analysis):
             reasoning = ai_analysis
     return reasoning, percentage
 
+def process_company(row, session_folder, timestamp, total_companies):
+    import time
+    company_start = time.time()
+    company_name = row.company_name
+    website_url = row.website
+    domain_name = row.domain_name
+    employee_count = getattr(row, 'no_of_employees', 'N/A')
+
+    # Scrape website
+    is_hiring, hiring_reasoning, scraped_text, additional_info = scraper.scrape_website(website_url)
+    if scraped_text:
+        ai_analysis = ai_model.get_purchase_probability(scraped_text)
+        reasoning, percentage = parse_ai_analysis(ai_analysis)
+    else:
+        ai_analysis = "Could not extract text from website"
+        reasoning = ai_analysis
+        percentage = "N/A"
+
+    company_time = time.time() - company_start
+    result = {
+        "Company Name": company_name,
+        "Domain": domain_name,
+        "Website": website_url,
+        "Employee Count": employee_count,
+        "Hiring?": "Yes" if is_hiring else "No",
+        "Hiring Reasoning": hiring_reasoning,
+        "Additional Sources": additional_info,
+        "AI Reasoning": reasoning,
+        "Purchase Probability %": percentage,
+        "detailed": {
+            "company_name": company_name,
+            "domain_name": domain_name,
+            "website_url": website_url,
+            "employee_count": employee_count,
+            "is_hiring": is_hiring,
+            "hiring_reasoning": hiring_reasoning,
+            "additional_sources": additional_info,
+            "scraped_text": scraped_text,
+            "ai_reasoning": reasoning,
+            "purchase_probability_percent": percentage,
+            "ai_analysis_raw": ai_analysis,
+            "analysis_timestamp": datetime.now().isoformat()
+        },
+        "company_time": company_time
+    }
+    # Save scraped_texts.txt immediately (thread-safe, append-only)
+    append_to_text_file(session_folder, result['detailed'])
+    return result
+
 def main():
     """
     Main function to run the sales intelligence bot with real-time saving.
@@ -164,94 +214,34 @@ def main():
     print("Starting analysis... (Press Ctrl+C to stop anytime)")
     print(f"{'='*60}")
     
+    max_workers = 8  # Tune this for your system/API limits
+    results = []
+    detailed_results = []
     start_time = time.time()
     company_count = 0
-    
     try:
-        for row in companies_to_process.itertuples(index=False):
-            if not running:
-                break
-            company_start = time.time()
-            company_name = row.company_name
-            website_url = row.website
-            domain_name = row.domain_name
-            employee_count = getattr(row, 'no_of_employees', 'N/A')
-            
-            print(f"\n{'='*60}")
-            print(f"📊 Processing {len(results) + 1}/{len(companies_to_process)}: {company_name}")
-            print(f"🌐 Website: {website_url}")
-            
-            # Scrape website
-            is_hiring, hiring_reasoning, scraped_text, additional_info = scraper.scrape_website(website_url)
-            # (No detailed hiring reasoning printed)
-            # (No additional sources printed)
-            # (No text extracted length printed)
-            # Get AI analysis only if scraped_text exists
-            if scraped_text:
-                ai_analysis = ai_model.get_purchase_probability(scraped_text)
-                reasoning, percentage = parse_ai_analysis(ai_analysis)
-                # (No detailed AI analysis printed)
-            else:
-                ai_analysis = "Could not extract text from website"
-                reasoning = ai_analysis
-                percentage = "N/A"
-                # (No detailed AI analysis printed)
-            
-            # Store basic results for CSV
-            results.append({
-                "Company Name": company_name,
-                "Domain": domain_name,
-                "Website": website_url,
-                "Employee Count": employee_count,
-                "Hiring?": "Yes" if is_hiring else "No",
-                "Hiring Reasoning": hiring_reasoning,
-                "Additional Sources": additional_info,
-                "AI Reasoning": reasoning,
-                "Purchase Probability %": percentage
-            })
-            
-            # Store detailed results for JSON
-            detailed_results.append({
-                "company_name": company_name,
-                "domain_name": domain_name,
-                "website_url": website_url,
-                "employee_count": employee_count,
-                "is_hiring": is_hiring,
-                "hiring_reasoning": hiring_reasoning,
-                "additional_sources": additional_info,
-                "scraped_text": scraped_text,
-                "ai_reasoning": reasoning,
-                "purchase_probability_percent": percentage,
-                "ai_analysis_raw": ai_analysis,
-                "analysis_timestamp": datetime.now().isoformat()
-            })
-            
-            # Save progress in real-time
-            save_progress_realtime(session_folder, results, detailed_results, timestamp, company_name)
-            append_to_text_file(session_folder, detailed_results[-1])
-            
-            company_time = time.time() - company_start
-            company_count += 1
-            # Print summary for this company
-            print(f"\n{'='*60}")
-            print(f"[{company_count}] {company_name} ({website_url})")
-            print(f"  Hiring: {'Yes' if is_hiring else 'No'} | Probability: {percentage} | Time: {company_time:.1f}s")
-            if percentage == "N/A":
-                print(f"⚠️  Warning: AI did not provide a percentage!")
-            print(f"{'='*60}")
-            
-            # Add a small delay to be respectful to websites
-            time.sleep(1)
-    
-    except KeyboardInterrupt:
-        print(f"\n\n🛑 Interrupted by user. Saving final progress...")
-    
-    finally:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for row in companies_to_process.itertuples(index=False):
+                futures.append(executor.submit(process_company, row, session_folder, timestamp, len(companies_to_process)))
+            for future in as_completed(futures):
+                result = future.result()
+                results.append({k: v for k, v in result.items() if k != 'detailed' and k != 'company_time'})
+                detailed_results.append(result['detailed'])
+                company_count += 1
+                # Print summary for this company
+                print(f"\n{'='*60}")
+                print(f"[{company_count}] {result['Company Name']} ({result['Website']})")
+                print(f"  Hiring: {result['Hiring?']} | Probability: {result['Purchase Probability %']} | Time: {result['company_time']:.1f}s")
+                if result['Purchase Probability %'] == "N/A":
+                    print(f"⚠️  Warning: AI did not provide a percentage!")
+                print(f"{'='*60}")
+                # Save progress in real-time (main thread)
+                save_progress_realtime(session_folder, results, detailed_results, timestamp, result['Company Name'])
+        total_time = time.time() - start_time
         # Final save
         if results:
             save_progress_realtime(session_folder, results, detailed_results, timestamp, "COMPLETED")
-            
-            total_time = time.time() - start_time
             print(f"\n{'='*60}")
             print(f"📊 Analysis Summary")
             print(f"{'='*60}")
@@ -264,15 +254,16 @@ def main():
             print(f"  - realtime_log.txt (real-time processing log)")
             print(f"📈 Total companies processed: {len(results)}")
             print(f"⏱️  Total session time: {total_time:.1f} seconds")
-            
             # Show summary
             results_df = pd.DataFrame(results)
             hiring_count = len(results_df[results_df['Hiring?'] == 'Yes'])
             print(f"💼 Companies hiring: {hiring_count}")
             print(f"❌ Companies not hiring: {len(results_df) - hiring_count}")
-            
             if not running:
                 print(f"\n🔄 You can resume by running the script again - it will continue from where it left off!")
+    except KeyboardInterrupt:
+        print(f"\n\n🛑 Interrupted by user. Saving final progress...")
+        save_progress_realtime(session_folder, results, detailed_results, timestamp, "INTERRUPTED")
 
 if __name__ == "__main__":
     main()

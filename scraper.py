@@ -5,8 +5,17 @@ from openai import OpenAI
 import config
 import time
 import urllib.parse
+import json
+from urllib.parse import urljoin
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
+
+COMMON_JOB_PATHS = [
+    '/careers', '/jobs', '/join-us', '/work-with-us', '/about/careers', '/about-us/careers', '/about/jobs', '/company/careers', '/company/jobs'
+]
+COMMON_JOB_SUBDOMAINS = [
+    'careers', 'jobs'
+]
 
 def scrape_website(url: str):
     """
@@ -849,6 +858,59 @@ def search_job_boards(base_url: str, soup: BeautifulSoup):
     
     return " | ".join(job_boards) if job_boards else ""
 
+def try_common_job_sections(base_url, visited_urls):
+    """Try common job/careers subdomains and paths if not found in navigation."""
+    found_urls = []
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url)
+    domain = parsed.netloc.replace('www.', '')
+    scheme = parsed.scheme
+    # Try subdomains
+    for sub in COMMON_JOB_SUBDOMAINS:
+        job_url = f"{scheme}://{sub}.{domain}"
+        if job_url not in visited_urls:
+            try:
+                resp = requests.get(job_url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+                if resp.status_code == 200 and len(resp.content) > 500:
+                    found_urls.append(job_url)
+                    visited_urls.add(job_url)
+            except: pass
+    # Try common paths
+    for path in COMMON_JOB_PATHS:
+        job_url = urljoin(base_url, path)
+        if job_url not in visited_urls:
+            try:
+                resp = requests.get(job_url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+                if resp.status_code == 200 and len(resp.content) > 500:
+                    found_urls.append(job_url)
+                    visited_urls.add(job_url)
+            except: pass
+    return found_urls
+
+def parse_schema_org_jobposting(html):
+    """Parse schema.org JobPosting markup from HTML."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, 'lxml')
+    jobs = []
+    for tag in soup.find_all(attrs={"itemtype": re.compile("JobPosting", re.I)}):
+        job = {}
+        for prop in tag.find_all(attrs={"itemprop": True}):
+            job[prop['itemprop']] = prop.get_text(strip=True)
+        if job:
+            jobs.append(job)
+    # Also check for JSON-LD
+    for script in soup.find_all('script', type='application/ld+json'):
+        try:
+            data = json.loads(script.string)
+            if isinstance(data, dict) and data.get('@type') == 'JobPosting':
+                jobs.append(data)
+            elif isinstance(data, list):
+                for entry in data:
+                    if isinstance(entry, dict) and entry.get('@type') == 'JobPosting':
+                        jobs.append(entry)
+        except: pass
+    return jobs
+
 def determine_hiring_with_ai(website_text: str, url: str, additional_info: str):
     """
     Uses AI to intelligently determine if a company is hiring with detailed reasoning.
@@ -866,89 +928,137 @@ def determine_hiring_with_ai(website_text: str, url: str, additional_info: str):
     
     prompt = f"""
     Analyze this company's website content and additional sources to determine if they are actively hiring.
-    
     Website: {url}
     Website content: {website_text}
     Additional sources info: {additional_info}
     
-    Look for ANY indicators of hiring or recruitment activity:
-    
-    STRONG INDICATORS (definitely hiring):
-    1. Job listings or open positions
-    2. Careers page with current openings
-    3. "We're hiring" or "Join our team" messaging
-    4. Job application forms or "Apply Now" buttons
-    5. Recent job postings or recruitment content
-    6. Contact information specifically for job applications
-    7. Active recruitment campaigns
-    8. Job board integrations (Lever, Greenhouse, etc.)
-    9. LinkedIn company page with job postings
-    10. Careers/jobs section in navigation menu
-    
-    WEAK INDICATORS (likely hiring):
-    1. Careers page exists (even without specific listings)
-    2. "Careers" or "Jobs" links in navigation
-    3. Company mentions of growth or expansion
-    4. "Join our team" or "Work with us" content
-    5. Employee testimonials or "life at company" content
-    6. Contact forms that mention careers or employment
-    
-    IMPORTANT: Be LESS conservative. If you find ANY careers page, job-related content, or hiring messaging, the company is likely hiring. Only say NO if there are absolutely no hiring-related elements found.
+    Look for CONCRETE EVIDENCE of job availability:
+    - Only mark DECISION: YES if you find actual job listings, open positions, job application forms, or explicit evidence that jobs are available and can be applied for now.
+    - The presence of a careers page, jobs page, or generic hiring messaging is NOT enough unless it contains specific, current job openings or application instructions.
+    - If you find schema.org JobPosting markup or job board integrations with open roles, this counts as concrete evidence.
+    - If there is no explicit evidence of available jobs, mark DECISION: NO.
     
     Provide your analysis in this exact format:
-    
     DECISION: [YES/NO]
-    REASONING: [Your detailed explanation of why you made this decision, including specific evidence found or not found from all sources. Be thorough and list all hiring indicators you found.]
-    
-    Remember: It's better to flag a company as hiring (even if uncertain) than to miss a company that is actually hiring.
+    REASONING: [Your detailed explanation, including a list of all job listings, job board links, and application forms found. Be thorough.]
     """
     
     try:
         response = client.chat.completions.create(
             model=config.OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are a hiring detection expert. Your job is to find ANY signs of hiring activity. Be thorough and less conservative - if there's any indication of hiring, mark it as YES. Only mark as NO if there are absolutely no hiring-related elements."},
+                {"role": "system", "content": "You are a hiring detection expert. Only mark YES if there is concrete evidence of job availability (job listings, open positions, or application forms). Be strict and require explicit evidence."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0,
             max_tokens=400,
         )
-        
         result = response.choices[0].message.content.strip()
-        
-        # Parse the response
         if "DECISION: YES" in result.upper():
             is_hiring = True
         elif "DECISION: NO" in result.upper():
             is_hiring = False
         else:
-            # Fallback parsing - be more lenient
-            if any(keyword in result.upper() for keyword in ["YES", "HIRING", "CAREERS", "JOBS"]):
+            # Fallback: Only set YES if explicit job evidence keywords are present
+            if any(keyword in result.upper() for keyword in ["JOB LISTING", "OPEN POSITION", "APPLY NOW", "APPLICATION FORM", "CURRENT OPENINGS"]):
                 is_hiring = True
             else:
                 is_hiring = False
-        
-        # Extract reasoning
         reasoning_start = result.find("REASONING:")
         if reasoning_start != -1:
             reasoning = result[reasoning_start + 10:].strip()
         else:
             reasoning = "AI provided analysis but reasoning format was unclear"
-        
         return is_hiring, reasoning
-        
     except Exception as e:
         print(f"Error with AI hiring detection: {e}")
-        # Fallback to basic keyword detection with reasoning - be more lenient
         all_text = f"{website_text} {additional_info}"
-        hiring_keywords = ['careers', 'jobs', 'hiring', 'open positions', 'join our team', 'apply', 'recruitment', 'employment', 'work with us']
+        # Fallback: Only set YES if explicit job evidence keywords are present
+        hiring_keywords = ['job listing', 'open position', 'apply now', 'application form', 'current openings']
         found_keywords = []
-        
         for keyword in hiring_keywords:
             if re.search(rf'\b{keyword}\b', all_text, re.I):
                 found_keywords.append(keyword)
-        
         if found_keywords:
-            return True, f"Fallback: Found hiring-related keywords: {', '.join(found_keywords)}"
+            return True, f"Fallback: Found explicit job evidence: {', '.join(found_keywords)}"
         else:
-            return False, "Fallback: No hiring-related keywords found across sources"
+            return False, "Fallback: No explicit job evidence found across sources"
+
+# --- ENHANCED CAREERS PAGE EXPLORATION ---
+def explore_careers_page_and_follow_links(careers_url, visited_urls, max_depth=2):
+    """Fetch the careers page, extract and follow relevant links (job boards, application forms, job subpages)."""
+    from bs4 import BeautifulSoup
+    import re
+    results = []
+    try:
+        resp = requests.get(careers_url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+        if resp.status_code == 200:
+            html = resp.content
+            soup = BeautifulSoup(html, 'lxml')
+            page_text = soup.get_text(" ", strip=True)
+            results.append(page_text)
+            # Find relevant links (job boards, application forms, job subpages)
+            for a in soup.find_all('a', href=True):
+                href = a['href']
+                link_text = a.get_text().lower()
+                # Heuristics: follow if link looks like job board, application, or job listing
+                if any(kw in href for kw in ['lever.co', 'greenhouse.io', 'workday.com', 'bamboohr.com', 'jobvite.com', 'icims.com', 'workable.com', 'ziprecruiter.com']) or \
+                   any(kw in link_text for kw in ['apply', 'open positions', 'job', 'opening', 'position', 'opportunities']):
+                    # Make absolute URL
+                    if href.startswith('http'):
+                        next_url = href
+                    else:
+                        from urllib.parse import urljoin
+                        next_url = urljoin(careers_url, href)
+                    if next_url not in visited_urls and max_depth > 0:
+                        visited_urls.add(next_url)
+                        try:
+                            sub_resp = requests.get(next_url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+                            if sub_resp.status_code == 200:
+                                sub_soup = BeautifulSoup(sub_resp.content, 'lxml')
+                                sub_text = sub_soup.get_text(" ", strip=True)
+                                results.append(sub_text)
+                        except: pass
+    except: pass
+    return results
+
+# --- PATCH scrape_website to use enhanced careers page exploration ---
+old_scrape_website = scrape_website
+
+def scrape_website(url: str):
+    try:
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Error fetching {url}: {e}")
+        return False, "Could not access website", None, ""
+    soup = BeautifulSoup(response.content, 'lxml')
+    all_text, navigation_info = navigate_website(url, soup)
+    visited_urls = set([url])
+    # Try common job/careers subdomains and paths
+    job_section_urls = try_common_job_sections(url, visited_urls)
+    job_section_texts = []
+    for job_url in job_section_urls:
+        # Enhanced: Explore careers page and follow relevant links
+        job_section_texts.extend(explore_careers_page_and_follow_links(job_url, visited_urls, max_depth=2))
+    # Parse schema.org JobPosting from all HTML
+    job_postings = parse_schema_org_jobposting(response.content)
+    for job_url in job_section_urls:
+        try:
+            resp = requests.get(job_url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+            if resp.status_code == 200:
+                job_postings.extend(parse_schema_org_jobposting(resp.content))
+        except: pass
+    # Search for additional info (job boards, LinkedIn, etc.)
+    additional_info = search_additional_sources(url, soup)
+    # Combine all info
+    combined_info = f"{additional_info} | {navigation_info}"
+    if job_section_urls:
+        combined_info += f" | Job section URLs: {', '.join(job_section_urls)}"
+    if job_postings:
+        combined_info += f" | Job postings found: {len(job_postings)}"
+    # Use AI to determine hiring status with reasoning
+    is_hiring, hiring_reasoning = determine_hiring_with_ai(
+        all_text + ' ' + ' '.join(job_section_texts), url, combined_info
+    )
+    return is_hiring, hiring_reasoning, all_text + ' ' + ' '.join(job_section_texts), combined_info
