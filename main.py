@@ -1,22 +1,18 @@
 import data_processor
 import scraper
-import ai_model
 import pandas as pd
-from tqdm import tqdm
 import time
 import json
 import os
 import signal
-import sys
 from datetime import datetime
-import re
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Global variables for graceful shutdown
 running = True
 session_folder = None
-VERSION = '1.0'
+VERSION = '1.1' # Updated version for pure extraction
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
@@ -34,7 +30,7 @@ def create_session_folder(start=0, end=None, version=VERSION):
 
 def load_existing_results(session_folder):
     """Load existing results if resuming"""
-    csv_file = os.path.join(session_folder, "results.csv")
+    csv_file = os.path.join(session_folder, "processed_companies.csv")
     if os.path.exists(csv_file):
         existing_df = pd.read_csv(csv_file)
         print(f"Found existing results: {len(existing_df)} companies already processed")
@@ -45,11 +41,11 @@ def save_progress_realtime(session_folder, results, detailed_results, timestamp,
     """Save current progress in real-time"""
     # Save basic results to CSV
     results_df = pd.DataFrame(results)
-    csv_file = os.path.join(session_folder, "results.csv")
+    csv_file = os.path.join(session_folder, "processed_companies.csv")
     results_df.to_csv(csv_file, index=False)
     
     # Save detailed results to JSON
-    json_file = os.path.join(session_folder, "detailed_results.json")
+    json_file = os.path.join(session_folder, "extracted_data.json")
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump(detailed_results, f, indent=2, ensure_ascii=False)
     
@@ -65,7 +61,6 @@ def save_progress_realtime(session_folder, results, detailed_results, timestamp,
             "json": json_file
         }
     }
-    
     with open(status_file, 'w', encoding='utf-8') as f:
         json.dump(status_info, f, indent=2)
     
@@ -74,39 +69,14 @@ def save_progress_realtime(session_folder, results, detailed_results, timestamp,
     with open(log_file, 'a', encoding='utf-8') as f:
         f.write(f"[{datetime.now().strftime('%H:%M:%S')}] Processed {len(results)} companies. Current: {current_company}\n")
 
-def append_to_text_file(session_folder, result):
-    """Append a single result to the text file"""
-    text_file = os.path.join(session_folder, "scraped_texts.txt")
+def append_to_raw_text_file(session_folder, result):
+    """Append a single result to the raw text file"""
+    text_file = os.path.join(session_folder, "extracted_information.txt")
     with open(text_file, 'a', encoding='utf-8') as f:
-        f.write(f"=== {result['company_name']} ({result['website_url']}) ===\n")
-        f.write(f"Hiring: {'Yes' if result['is_hiring'] else 'No'}\n")
-        f.write(f"Hiring Reasoning: {result['hiring_reasoning']}\n")
-        if result['additional_sources']:
-            f.write(f"Additional Sources: {result['additional_sources']}\n")
-        f.write(f"Employee Count: {result['employee_count']}\n")
-        f.write(f"AI Reasoning: {result['ai_reasoning']}\n")
-        f.write(f"Purchase Probability %: {result['purchase_probability_percent']}\n")
-        f.write(f"Raw AI Analysis:\n{result['ai_analysis_raw']}\n")
-        f.write(f"Scraped Text:\n{result['scraped_text']}\n")
-        f.write("\n" + "="*80 + "\n\n")
+        f.write(result['extracted_text'])
+        f.write("\n\n")
 
-def parse_ai_analysis(ai_analysis):
-    reasoning = ""
-    percentage = "N/A"
-    if ai_analysis:
-        match = re.search(r'PERCENTAGE:\s*([0-9]{1,3}%)', ai_analysis, re.IGNORECASE)
-        if match:
-            percentage = match.group(1).strip()
-            reasoning = ai_analysis.replace(match.group(0), "").strip()
-        else:
-            # fallback: try to find any percentage
-            pct_match = re.search(r'([0-9]{1,3}%)', ai_analysis)
-            if pct_match:
-                percentage = pct_match.group(1)
-            reasoning = ai_analysis
-    return reasoning, percentage
-
-def process_company(row, session_folder, timestamp, total_companies):
+def process_company(row, session_folder):
     import time
     company_start = time.time()
     company_name = row.company_name
@@ -114,15 +84,12 @@ def process_company(row, session_folder, timestamp, total_companies):
     domain_name = row.domain_name
     employee_count = getattr(row, 'no_of_employees', 'N/A')
 
-    # Scrape website
-    is_hiring, hiring_reasoning, scraped_text, additional_info = scraper.scrape_website(website_url)
-    if scraped_text:
-        ai_analysis = ai_model.get_purchase_probability(scraped_text)
-        reasoning, percentage = parse_ai_analysis(ai_analysis)
-    else:
-        ai_analysis = "Could not extract text from website"
-        reasoning = ai_analysis
-        percentage = "N/A"
+    # Scrape website for raw text
+    extracted_text = scraper.extract_website_text(website_url)
+    
+    status = "Success"
+    if "Could not access website" in extracted_text:
+        status = "Failed"
 
     company_time = time.time() - company_start
     result = {
@@ -130,47 +97,33 @@ def process_company(row, session_folder, timestamp, total_companies):
         "Domain": domain_name,
         "Website": website_url,
         "Employee Count": employee_count,
-        "Hiring?": "Yes" if is_hiring else "No",
-        "Hiring Reasoning": hiring_reasoning,
-        "Additional Sources": additional_info,
-        "AI Reasoning": reasoning,
-        "Purchase Probability %": percentage,
+        "Status": status,
         "detailed": {
             "company_name": company_name,
             "domain_name": domain_name,
             "website_url": website_url,
             "employee_count": employee_count,
-            "is_hiring": is_hiring,
-            "hiring_reasoning": hiring_reasoning,
-            "additional_sources": additional_info,
-            "scraped_text": scraped_text,
-            "ai_reasoning": reasoning,
-            "purchase_probability_percent": percentage,
-            "ai_analysis_raw": ai_analysis,
-            "analysis_timestamp": datetime.now().isoformat()
+            "status": status,
+            "extracted_text": extracted_text,
+            "extraction_timestamp": datetime.now().isoformat()
         },
         "company_time": company_time
     }
-    # Save scraped_texts.txt immediately (thread-safe, append-only)
-    append_to_text_file(session_folder, result['detailed'])
+    # This append will now happen in order because the main loop processes sequentially
+    append_to_raw_text_file(session_folder, result['detailed'])
     return result
 
 def main():
     """
-    Main function to run the sales intelligence bot with real-time saving.
+    Main function to run the sales intelligence bot for pure data extraction.
     """
     global running, session_folder
     
     # Set up signal handler for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     
-    # Check if product description is set
-    if ai_model.config.PRODUCT_DESCRIPTION == "YOUR_PRODUCT_DESCRIPTION_HERE":
-        print("ERROR: Please update PRODUCT_DESCRIPTION in config.py with your actual product information!")
-        return
-    
     # Parse command-line arguments for custom range
-    parser = argparse.ArgumentParser(description="Sales Intelligence Bot")
+    parser = argparse.ArgumentParser(description="Sales Intelligence Bot - Data Extractor")
     parser.add_argument('--start', type=int, default=0, help='Start index (inclusive)')
     parser.add_argument('--end', type=int, default=None, help='End index (exclusive)')
     parser.add_argument('--version', type=str, default=VERSION, help='Session version string')
@@ -181,7 +134,6 @@ def main():
     print(f"Session folder: {session_folder}")
     print(f"📁 Results will be saved in real-time to: {session_folder}")
     print(f"⏹️  Press Ctrl+C to stop and save progress")
-    print(f"🔄 You can resume later by running the script again")
     
     # Load companies
     print("\nLoading company data...")
@@ -204,66 +156,68 @@ def main():
         print(f"🔄 Resuming: {len(companies_to_process)} companies remaining to process")
     else:
         # Start fresh
-        companies_to_process = companies_df  # Now using the custom range
+        companies_to_process = companies_df
         results = []
-        print(f"🚀 Starting fresh: processing first {len(companies_to_process)} companies")
+        print(f"🚀 Starting fresh: processing {len(companies_to_process)} companies")
 
     detailed_results = []
     
     print(f"\n{'='*60}")
-    print("Starting analysis... (Press Ctrl+C to stop anytime)")
+    print("Starting data extraction... (Press Ctrl+C to stop anytime)")
     print(f"{'='*60}")
     
-    max_workers = 8  # Tune this for your system/API limits
-    results = []
-    detailed_results = []
+    max_workers = 10
     start_time = time.time()
     company_count = 0
-    try:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for row in companies_to_process.itertuples(index=False):
-                futures.append(executor.submit(process_company, row, session_folder, timestamp, len(companies_to_process)))
-            for future in as_completed(futures):
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit tasks and keep them in a list to preserve order
+        tasks = list(companies_to_process.itertuples(index=False))
+        futures = [executor.submit(process_company, row, session_folder) for row in tasks]
+        future_map = {future: tasks[i] for i, future in enumerate(futures)}
+
+        # Iterate through the futures in the order they were submitted to process results sequentially
+        for future in futures:
+            if not running:
+                # On shutdown, cancel all futures that haven't started
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
+                break
+            try:
                 result = future.result()
                 results.append({k: v for k, v in result.items() if k != 'detailed' and k != 'company_time'})
                 detailed_results.append(result['detailed'])
                 company_count += 1
+                
                 # Print summary for this company
                 print(f"\n{'='*60}")
-                print(f"[{company_count}] {result['Company Name']} ({result['Website']})")
-                print(f"  Hiring: {result['Hiring?']} | Probability: {result['Purchase Probability %']} | Time: {result['company_time']:.1f}s")
-                if result['Purchase Probability %'] == "N/A":
-                    print(f"⚠️  Warning: AI did not provide a percentage!")
+                print(f"[{company_count}/{len(companies_to_process)}] {result['Company Name']} ({result['Website']})")
+                print(f"  Status: {result['Status']} | Time: {result['company_time']:.1f}s")
                 print(f"{'='*60}")
-                # Save progress in real-time (main thread)
+                
+                # Save progress in real-time. This will now be in order.
                 save_progress_realtime(session_folder, results, detailed_results, timestamp, result['Company Name'])
-        total_time = time.time() - start_time
-        # Final save
-        if results:
-            save_progress_realtime(session_folder, results, detailed_results, timestamp, "COMPLETED")
-            print(f"\n{'='*60}")
-            print(f"📊 Analysis Summary")
-            print(f"{'='*60}")
-            print(f"📁 Session folder: {session_folder}")
-            print(f"📄 Files saved:")
-            print(f"  - results.csv (basic results in CSV format)")
-            print(f"  - detailed_results.json (complete structured data)")
-            print(f"  - scraped_texts.txt (all scraped text and analysis)")
-            print(f"  - status.json (session status and progress)")
-            print(f"  - realtime_log.txt (real-time processing log)")
-            print(f"📈 Total companies processed: {len(results)}")
-            print(f"⏱️  Total session time: {total_time:.1f} seconds")
-            # Show summary
-            results_df = pd.DataFrame(results)
-            hiring_count = len(results_df[results_df['Hiring?'] == 'Yes'])
-            print(f"💼 Companies hiring: {hiring_count}")
-            print(f"❌ Companies not hiring: {len(results_df) - hiring_count}")
-            if not running:
-                print(f"\n🔄 You can resume by running the script again - it will continue from where it left off!")
-    except KeyboardInterrupt:
-        print(f"\n\n🛑 Interrupted by user. Saving final progress...")
-        save_progress_realtime(session_folder, results, detailed_results, timestamp, "INTERRUPTED")
+            except Exception as e:
+                company_row = future_map[future]
+                print(f"An error occurred while processing {getattr(company_row, 'company_name', 'Unknown')}: {e}")
 
-if __name__ == "__main__":
+    total_time = time.time() - start_time
+    
+    # Final save
+    if results:
+        save_progress_realtime(session_folder, results, detailed_results, timestamp, "COMPLETED")
+        print(f"\n{'='*60}")
+        print(f"📊 Extraction Summary")
+        print(f"{'='*60}")
+        print(f"📁 Session folder: {session_folder}")
+        print(f"📄 Files saved:")
+        print(f"  - processed_companies.csv (list of companies and status)")
+        print(f"  - extracted_data.json (full data with text)")
+        print(f"  - extracted_information.txt (raw text output)")
+        print(f"🕒 Total time: {total_time:.2f} seconds for {len(results)} companies")
+    else:
+        print("No companies were processed in this session.")
+
+if __name__ == '__main__':
     main()
